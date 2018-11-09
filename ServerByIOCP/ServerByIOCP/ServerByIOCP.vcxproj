@@ -145,10 +145,19 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="common.h" />
+    <ClInclude Include="CoreByIOCP.h" />
+    <ClInclude Include="LanEvent.h" />
+    <ClInclude Include="LanThreadPool.h" />
+    <ClInclude Include="LanWorkerThread.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CoreByIOCP.cpp" />
+    <ClCompile Include="LanEvent.cpp" />
+    <ClCompile Include="LanThreadPool.cpp" />
+    <ClCompile Include="LanWorkerThread.cpp" />
     <ClCompile Include="ServerByIOCP.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>

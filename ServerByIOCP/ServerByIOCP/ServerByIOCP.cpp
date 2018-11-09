@@ -8,31 +8,13 @@
 #include <stdio.h>
 #include <queue>
 #include <mutex>
+#include "LanThreadPool.h"
 using namespace std;
 
 #pragma comment(lib,"ws2_32.lib")
 
 //FD_SETSIZE是在winsocket2.h头文件里定义的，这里windows默认最大为64
 //在包含winsocket2.h头文件前使用宏定义可以修改这个值
-
-const int nMessageWordMaxSize = 1023;	//发送消息的文字信息最大的字节数
-										//TCP消息封装结构
-struct TCPMessage
-{
-	bool bIsHeartBeat;	//是否为心跳报文
-	char chMessage[nMessageWordMaxSize];	//发送的文字信息(这里为定长的大小)  //如果不要设置定长，则需要使用流模式去传递！！！	
-
-	TCPMessage()
-	{
-		bIsHeartBeat = true;
-		memset(chMessage, 0, nMessageWordMaxSize);
-	}
-};
-
-const int nSize = sizeof(char) * sizeof(TCPMessage);
-
-#define PORT 8888
-#define SRV_IP "192.168.15.112"
 
 int g_nSockConn = 0;//请求连接的数目
 
@@ -213,7 +195,7 @@ int main()
 	//获取系统核心数
 	int nCPUCount = 0;
 	SYSTEM_INFO sysInfo;
-	GetSystemInfo(sysInfo);
+	GetSystemInfo(&sysInfo);
 	nCPUCount = sysInfo.dwNumberOfProcessors;
 
 	/*我们最好是建立CPU核心数量*2(也有人说是建立 CPU“核心数量 * 2 +2”个线程)那么多的线程，这样更可以充分利用CPU资源，因为完成端口的调度是非常智能的，
@@ -221,13 +203,10 @@ int main()
 	  因为完成端口的目标是要使得CPU满负荷的工作。
 	  */
 	int nThreadCount = 2 * nCPUCount;
-	std::vector< std::thread*> vWorkThread;
-
-	for (int i=0; i<nThreadCount; i++)
-	{
-		std::thread* workThread = new std::thread(&WorkerThread);
-		vWorkThread.push_back(workThread);
-	}
+	//获取线程池对象
+	LanThreadPool* lanThreadPool = LanThreadPool::GetLanThreadPoolInstance();
+	lanThreadPool->SetThreadPool(nThreadCount, nThreadCount);
+	
 
 	WSADATA wsaData;
 	WSAStartup(MAKEWORD(2, 2), &wsaData);
