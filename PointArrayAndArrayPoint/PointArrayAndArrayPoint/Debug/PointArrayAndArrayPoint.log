@@ -1,0 +1,4 @@
+﻿  PointArrayAndArrayPoint.cpp
+e:\lanliangsheng\2015proj\pointarrayandarraypoint\pointarrayandarraypoint\pointarrayandarraypoint.cpp(12): warning C4101: “a”: 未引用的局部变量
+  PointArrayAndArrayPoint.vcxproj -> E:\lanliangsheng\2015Proj\PointArrayAndArrayPoint\Debug\PointArrayAndArrayPoint.exe
+  PointArrayAndArrayPoint.vcxproj -> E:\lanliangsheng\2015Proj\PointArrayAndArrayPoint\Debug\PointArrayAndArrayPoint.pdb (Full PDB)

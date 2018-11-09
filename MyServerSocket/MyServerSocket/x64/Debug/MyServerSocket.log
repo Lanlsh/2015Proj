@@ -1,0 +1,7 @@
+﻿  MyServerSocket.cpp
+e:\lanliangsheng\2015proj\myserversocket\myserversocket\myserversocket.cpp(20): warning C4996: 'gethostbyname': Use getaddrinfo() or GetAddrInfoW() instead or define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings
+  c:\program files (x86)\windows kits\8.1\include\um\winsock2.h(2238): note: 参见“gethostbyname”的声明
+  MyServer.cpp
+  正在生成代码...
+  MyServerSocket.vcxproj -> E:\lanliangsheng\2015Proj\MyServerSocket\x64\Debug\MyServerSocket.exe
+  MyServerSocket.vcxproj -> E:\lanliangsheng\2015Proj\MyServerSocket\x64\Debug\MyServerSocket.pdb (Full PDB)

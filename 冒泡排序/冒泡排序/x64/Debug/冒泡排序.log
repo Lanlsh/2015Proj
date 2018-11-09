@@ -1,0 +1,5 @@
+﻿  冒泡排序.cpp
+e:\lanliangsheng\2015proj\冒泡排序\冒泡排序\冒泡排序.cpp(55): warning C4101: “t4”: 未引用的局部变量
+e:\lanliangsheng\2015proj\冒泡排序\冒泡排序\冒泡排序.cpp(55): warning C4101: “t3”: 未引用的局部变量
+  冒泡排序.vcxproj -> E:\lanliangsheng\2015Proj\冒泡排序\x64\Debug\冒泡排序.exe
+  冒泡排序.vcxproj -> E:\lanliangsheng\2015Proj\冒泡排序\x64\Debug\冒泡排序.pdb (Full PDB)
