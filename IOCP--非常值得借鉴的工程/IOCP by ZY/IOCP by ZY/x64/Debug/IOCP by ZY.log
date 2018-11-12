@@ -1,0 +1,8 @@
+﻿  IOCPServer.cpp
+e:\lanliangsheng\2015proj\iocp by zy\iocp by zy\iocp by zy\iocpserver.cpp(125): warning C4311: “类型转换”: 从“IOCP_PARAM *”到“DWORD”的指针截断
+e:\lanliangsheng\2015proj\iocp by zy\iocp by zy\iocp by zy\iocpserver.cpp(125): warning C4302: “类型转换”: 从“IOCP_PARAM *”到“DWORD”截断
+e:\lanliangsheng\2015proj\iocp by zy\iocp by zy\iocp by zy\iocpserver.cpp(325): warning C4311: “类型转换”: 从“IOCP_PARAM *”到“DWORD”的指针截断
+e:\lanliangsheng\2015proj\iocp by zy\iocp by zy\iocp by zy\iocpserver.cpp(325): warning C4302: “类型转换”: 从“IOCP_PARAM *”到“DWORD”截断
+e:\lanliangsheng\2015proj\iocp by zy\iocp by zy\iocp by zy\iocpserver.cpp(463): warning C4267: “=”: 从“size_t”转换到“ULONG”，可能丢失数据
+  IOCP by ZY.vcxproj -> E:\lanliangsheng\2015Proj\IOCP by ZY\IOCP by ZY\x64\Debug\IOCP by ZY.exe
+  IOCP by ZY.vcxproj -> E:\lanliangsheng\2015Proj\IOCP by ZY\IOCP by ZY\x64\Debug\IOCP by ZY.pdb (Full PDB)
