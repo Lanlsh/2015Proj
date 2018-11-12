@@ -9,7 +9,17 @@
 
 #include <stdio.h>
 #include <tchar.h>
+#include <iostream>
 
+using namespace std;
+
+class CCoreByIOCP;
+class LanThreadPool;
+
+#include "common.h"
+#include "Mapper.h"
+#include "CoreByIOCP.h"
+#include "LanWorkerThread.h"
 
 
 // TODO:  在此处引用程序需要的其他头文件

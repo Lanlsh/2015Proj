@@ -147,14 +147,17 @@
   <ItemGroup>
     <ClInclude Include="common.h" />
     <ClInclude Include="CoreByIOCP.h" />
+    <ClInclude Include="LanCriticalLock.h" />
     <ClInclude Include="LanEvent.h" />
     <ClInclude Include="LanThreadPool.h" />
     <ClInclude Include="LanWorkerThread.h" />
+    <ClInclude Include="Mapper.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CoreByIOCP.cpp" />
+    <ClCompile Include="LanCriticalLock.cpp" />
     <ClCompile Include="LanEvent.cpp" />
     <ClCompile Include="LanThreadPool.cpp" />
     <ClCompile Include="LanWorkerThread.cpp" />

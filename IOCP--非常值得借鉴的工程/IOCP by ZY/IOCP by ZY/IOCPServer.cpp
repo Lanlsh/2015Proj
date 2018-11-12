@@ -62,6 +62,12 @@ bool CIOCPServer::Stop()
 
 		for (unsigned int i = 0; i < m_nThreadCnt; i++)
 		{
+			//PostQueuedCompletionStatus函数，向每个工作者线程都发送—个特殊的完成数据包。该函数会指示每个线程都“立即结束并退出”
+			/*
+			通过为线程池中的每个线程都调用一次PostQueuedCompletionStatus，我们可以将它们都唤醒。
+			每个线程会对GetQueuedCompletionStatus的返回值进行检查，如果发现应用程序正在终止，那么它们就可以进行清理工作并正常地退出。
+			"也就是说调用此句会唤醒相应的线程，从而不需要调用额外语句去唤醒相应线程！！！！"
+			*/
 			PostQueuedCompletionStatus(m_hIOCompletionPort, 0, (DWORD)EXIT_CODE, NULL);
 		}
 
