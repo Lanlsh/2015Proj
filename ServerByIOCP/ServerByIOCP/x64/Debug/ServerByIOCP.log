@@ -5,7 +5,7 @@
   LanEvent.cpp
   LanCriticalLock.cpp
   CoreByIOCP.cpp
-e:\lanliangsheng\2015proj\serverbyiocp\serverbyiocp\corebyiocp.cpp(63): warning C4018: “<”: 有符号/无符号不匹配
+e:\lanliangsheng\2015proj\serverbyiocp\serverbyiocp\corebyiocp.cpp(77): warning C4018: “<”: 有符号/无符号不匹配
+e:\lanliangsheng\2015proj\serverbyiocp\serverbyiocp\corebyiocp.cpp(399): error C2664: “void CCoreByIOCP::AddCLientInfo(SOCKET,std::string)”: 无法将参数 2 从“SOCKADDR_IN”转换为“std::string”
+  e:\lanliangsheng\2015proj\serverbyiocp\serverbyiocp\corebyiocp.cpp(399): note: 没有可用于执行该转换的用户定义的转换运算符，或者无法调用该运算符
   正在生成代码...
-  ServerByIOCP.vcxproj -> E:\lanliangsheng\2015Proj\ServerByIOCP\x64\Debug\ServerByIOCP.exe
-  ServerByIOCP.vcxproj -> E:\lanliangsheng\2015Proj\ServerByIOCP\x64\Debug\ServerByIOCP.pdb (Full PDB)

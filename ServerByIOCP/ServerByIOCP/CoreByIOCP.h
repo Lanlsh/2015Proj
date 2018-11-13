@@ -3,6 +3,7 @@
 #include "stdafx.h"
 #include "LanCriticalLock.h"
 #include "LanEvent.h"
+#include <map>
 
 typedef void (CALLBACK* NOTIFYPROC)(LPVOID, PER_IO_CONTEXT*, UINT);
 
@@ -60,6 +61,15 @@ protected:
 	// 将 监听套接字 绑定到完成端口中
 	bool AssociateSocketWithCompletionPort(SOCKET socket, DWORD dwCompletionKey);
 
+	//增加客户端信息
+	void AddCLientInfo(SOCKET socket, string str);
+
+	//删除客户端信息
+	void RomoveClientInfo(SOCKET socket);
+
+	//根据IP和端口号获取客户端SOCKET
+	void GetClientSOCKET(string str, SOCKET& socket);
+
 private:
 	NOTIFYPROC m_pNotifyProc;					// 消息回调函数
 	CRITICAL_SECTION m_cs;						// 关键段（临界资源）
@@ -86,5 +96,11 @@ private:
 
 	LPFN_ACCEPTEX  m_lpfnAcceptEx;              // AcceptEx 和 GetAcceptExSockaddrs 的函数指针，用于调用这两个扩展函数
 	LPFN_GETACCEPTEXSOCKADDRS   m_lpfnGetAcceptExSockAddrs;
+
+	//客户端socket和客户端IP地址以及端口号
+	std::map<SOCKET, string>	m_mapClient;
+
+	//用来判断是否执行了StopCore	//用于当coreIOCP已经跑起来时，突然关闭此进程导致资源没有安全释放
+	bool	m_bIsExecStopCore;
 };
 

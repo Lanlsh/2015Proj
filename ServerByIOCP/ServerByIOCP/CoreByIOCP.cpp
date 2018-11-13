@@ -13,17 +13,28 @@ CCoreByIOCP::CCoreByIOCP()
 	m_pListenContext = new PER_IO_CONTEXT();
 	m_nKeepLiveTime = 1000 * 60 * 3; // 三分钟探测一次
 	m_pListenIocpParam = new IOCP_PARAM;
+	m_mapClient.clear();
+
+	//重置此标志
+	m_bIsExecStopCore = false;
 }
 
 
 CCoreByIOCP::~CCoreByIOCP()
 {
+	if (!m_bIsExecStopCore)
+	{
+		StopCore();
+	}
 }
 
 bool CCoreByIOCP::RunCore(NOTIFYPROC pNotifyProc, const UINT& nPort)
 {
 	m_nPort = nPort;
 	m_pNotifyProc = pNotifyProc;
+
+	//重置此标志
+	m_bIsExecStopCore = false;
 
 	//初始化临界区对象
 	InitializeCriticalSection(&m_cs);
@@ -54,6 +65,9 @@ bool CCoreByIOCP::RunCore(NOTIFYPROC pNotifyProc, const UINT& nPort)
 
 void CCoreByIOCP::StopCore()
 {
+	//重置标志
+	m_bIsExecStopCore = true;
+
 	if (m_socListen != INVALID_SOCKET)
 	{
 		SetEvent(m_hShutDownEvent);
@@ -71,9 +85,6 @@ void CCoreByIOCP::StopCore()
 				PostQueuedCompletionStatus(m_hIOCompletionPort, 0, (DWORD)EXIT_CODE, NULL);
 			}
 		}
-
-
-		//WaitForMultipleObjects(m_nThreadCnt, m_pWorkThreads, TRUE, INFINITE);
 
 		ReleaseResource();
 	}
@@ -121,9 +132,9 @@ bool CCoreByIOCP::InitializeListenSocket()
 	if (INVALID_SOCKET == m_socListen)
 		return false;
 
-	m_pListenIocpParam->m_sock = m_socListen;
+	m_pListenIocpParam->m_rourceSock = m_socListen;
 	// 将 监听套接字 绑定到完成端口中
-	if (!AssociateSocketWithCompletionPort(m_socListen, (DWORD)(m_pListenIocpParam->m_sock)))
+	if (!AssociateSocketWithCompletionPort(m_socListen, (DWORD)(m_pListenIocpParam->m_rourceSock)))
 	{
 		RELEASE_SOCKET(m_socListen);
 		return false;
@@ -240,7 +251,7 @@ IOCP_PARAM* CCoreByIOCP::AllocateIocpParam()
 	m_listIocpParam.push_back(pIocpParam);
 	if (pIocpParam != NULL)
 	{
-		pIocpParam->m_sock = INVALID_SOCKET;
+		pIocpParam->m_rourceSock = INVALID_SOCKET;
 	}
 	return pIocpParam;
 }
@@ -258,9 +269,13 @@ VOID CCoreByIOCP::RemoveStaleClient(PER_IO_CONTEXT* pIoContext, BOOL bGraceful/*
 		// 如果.l_onoff=0;则功能和2.)作用相同;
 		lingerStruct.l_onoff = 1;	//开关，零或者非零 
 		lingerStruct.l_linger = 0;  //优雅关闭最长时限（允许逗留的时限 秒）
-		setsockopt(pIoContext->m_sock, SOL_SOCKET, SO_LINGER,
+		setsockopt(pIoContext->m_rourceSock, SOL_SOCKET, SO_LINGER,
 			(char*)&lingerStruct, sizeof(lingerStruct));
 	}
+
+
+	//将该客户端的信息清除
+	RomoveClientInfo(pIoContext->m_rourceSock);
 
 	// 释放 PER_SOCKET_CONTEXT 中的数据
 	std::list<PER_IO_CONTEXT*>::iterator iter;
@@ -268,10 +283,10 @@ VOID CCoreByIOCP::RemoveStaleClient(PER_IO_CONTEXT* pIoContext, BOOL bGraceful/*
 	if (iter != m_listIoContext.end())
 	{
 		// CancelIo 取消挂起的IO操作 优雅的关闭这个套接字句柄
-		CancelIo((HANDLE)pIoContext->m_sock);
+		CancelIo((HANDLE)pIoContext->m_rourceSock);
 
-		closesocket(pIoContext->m_sock);
-		pIoContext->m_sock = INVALID_SOCKET;
+		closesocket(pIoContext->m_rourceSock);
+		pIoContext->m_rourceSock = INVALID_SOCKET;
 
 		// 判断是否还在进行IO操作 等待上一个IO操作完成再关闭
 		while (!HasOverlappedIoCompleted((LPOVERLAPPED)pIoContext))
@@ -323,7 +338,7 @@ VOID CCoreByIOCP::ReleaseResource()
 	iter = m_listIoContext.begin();
 	while (iter != m_listIoContext.end())
 	{
-		closesocket((*iter)->m_sock);
+		closesocket((*iter)->m_rourceSock);
 		delete *iter;
 		++iter;
 	}
@@ -336,6 +351,9 @@ VOID CCoreByIOCP::ReleaseResource()
 		delete *iter;
 		++iter;
 	}
+
+	//清空客户端IP信息
+	m_mapClient.clear();
 }
 
 // 接收到客户端的连接
@@ -356,19 +374,19 @@ bool CCoreByIOCP::OnAccept(PER_IO_CONTEXT* pIoContext)
 		(sockaddr**)&RemoteSockAddr, &nLen);			// 客户端信息
 
 	PER_IO_CONTEXT* pNewIoContext = AllocateClientIOContext();
-	pNewIoContext->m_sock = pIoContext->m_sock;
-	pNewIoContext->m_addr = *RemoteSockAddr;
+	pNewIoContext->m_rourceSock = pIoContext->m_rourceSock;
+	pNewIoContext->m_resourceAddr = *RemoteSockAddr;
 
 	// 处理消息，此处为连接上，第一次接受到客户端的数据
 	m_pNotifyProc(NULL, pIoContext, NC_CLIENT_CONNECT);
 
 	IOCP_PARAM* pIocpParam = AllocateIocpParam();
-	pIocpParam->m_sock = pNewIoContext->m_sock;
+	pIocpParam->m_rourceSock = pNewIoContext->m_rourceSock;
 	// 将新连接的客户端的socket，绑定到完成端口
-	if (!AssociateSocketWithCompletionPort(pNewIoContext->m_sock, (DWORD)pIocpParam->m_sock))
+	if (!AssociateSocketWithCompletionPort(pNewIoContext->m_rourceSock, (DWORD)pIocpParam->m_rourceSock))
 	{
 		closesocket(m_socListen);
-		closesocket(pNewIoContext->m_sock);
+		closesocket(pNewIoContext->m_rourceSock);
 
 		delete pNewIoContext;
 		delete pIocpParam;
@@ -377,9 +395,18 @@ bool CCoreByIOCP::OnAccept(PER_IO_CONTEXT* pIoContext)
 		return false;
 	}
 
+	SendToIpInfo ipInfo;
+	ZeroMemory(&ipInfo, MAX_BUFFER_LEN);
+	memcpy(&ipInfo, pIoContext->m_szBuf, MAX_BUFFER_LEN);
+	string strIP = ipInfo.sin_IP;
+	string strPort = ipInfo.sin_port;
+	string str = strIP + ":" + strPort;
+	//增加客户端信息
+	AddCLientInfo(pNewIoContext->m_rourceSock, str);
+
 	// Set KeepAlive 设置心跳包，开启保活机制，用于保证TCP的长连接（它会在底层发一些数据，不会传到应用层）
 	unsigned long chOpt = 1;
-	if (SOCKET_ERROR == setsockopt(pNewIoContext->m_sock, SOL_SOCKET, SO_KEEPALIVE, (char*)&chOpt, sizeof(char)))
+	if (SOCKET_ERROR == setsockopt(pNewIoContext->m_rourceSock, SOL_SOCKET, SO_KEEPALIVE, (char*)&chOpt, sizeof(char)))
 	{
 		// 心跳激活失败
 		MoveToFreeParamPool(pIocpParam);
@@ -394,7 +421,7 @@ bool CCoreByIOCP::OnAccept(PER_IO_CONTEXT* pIoContext)
 	klive.keepaliveinterval = 1000 * 10; // 重试间隔为10秒 Resend if No-Reply
 	WSAIoctl
 	(
-		pNewIoContext->m_sock,
+		pNewIoContext->m_rourceSock,
 		SIO_KEEPALIVE_VALS,
 		&klive,
 		sizeof(tcp_keepalive),
@@ -456,14 +483,14 @@ bool CCoreByIOCP::PostAcceptEx(PER_IO_CONTEXT * pAcceptIoContext)
 
 										  // 为以后新连入的客户端准备好Socket（这是与传统Accept最大的区别）
 										  // 实际上市创建一个 网络连接池 ，类似于 内存池，我们先创建一定数量的socket，然后直接使用就是了
-	pAcceptIoContext->m_sock = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_IP, NULL, 0, WSA_FLAG_OVERLAPPED);
-	if (INVALID_SOCKET == pAcceptIoContext->m_sock)
+	pAcceptIoContext->m_rourceSock = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_IP, NULL, 0, WSA_FLAG_OVERLAPPED);
+	if (INVALID_SOCKET == pAcceptIoContext->m_rourceSock)
 		return false;
 
 	// 投递异步 AcceptEx
 	if (FALSE == m_lpfnAcceptEx(
 		m_socListen,					//侦听套接字。服务器应用程序在这个套接字上等待连接
-		pAcceptIoContext->m_sock,		//将用于连接的套接字。此套接字必须不能已经绑定或者已经连接。
+		pAcceptIoContext->m_rourceSock,		//将用于连接的套接字。此套接字必须不能已经绑定或者已经连接。
 		pAcceptIoContext->m_wsaBuf.buf,	//指向一个缓冲区，该缓冲区用于接收新建连接的所发送数据的第一个块、该服务器的本地地址和客户端的远程地址。接收到的数据将被写入到缓冲区0偏移处，而地址随后写入。 该参数必须指定，如果此参数设置为NULL，将不会得到执行，也无法通过GetAcceptExSockaddrs函数获得本地或远程的地址
 		pAcceptIoContext->m_wsaBuf.len - ((sizeof(SOCKADDR_IN) + 16) * 2),	//这一大小应不包括服务器的本地地址的大小或客户端的远程地址，他们被追加到输出缓冲区。如果dwReceiveDataLength是零，AcceptEx将不等待接收任何数据，而是尽快建立连接。
 		sizeof(SOCKADDR_IN) + 16,	//为本地地址信息保留的字节数。此值必须比所用传输协议的最大地址大小长16个字节
@@ -489,7 +516,7 @@ bool CCoreByIOCP::PostRecv(PER_IO_CONTEXT* pIoContext)
 
 	ULONG ulFlags = MSG_PARTIAL;
 	UINT nRet = WSARecv(
-		pIoContext->m_sock,
+		pIoContext->m_rourceSock,
 		&(pIoContext->m_wsaBuf),
 		1,
 		&dwNumBytesOfRecvd,// 接收的字节数，异步操作的返回结果一般为0，具体接收到的字节数在完成端口获得
@@ -536,19 +563,28 @@ bool CCoreByIOCP::PostSend(PER_IO_CONTEXT* pIoContext)
 	pIoContext->m_IOType = EM_IOSend;
 	ULONG ulFlags = MSG_PARTIAL;
 
+	SOCKET	socket;
+	GetClientSOCKET(pIoContext->m_desAddr, socket);
+	if (socket == INVALID_SOCKET)
+	{
+		return false;
+	}
+
 	INT nRet = WSASend(
-		pIoContext->m_sock,
+		pIoContext->m_rourceSock,
 		&pIoContext->m_wsaBuf,
 		1,
 		&(pIoContext->m_wsaBuf.len),
 		ulFlags,
 		&(pIoContext->m_overLapped),
 		NULL);
+
 	if (SOCKET_ERROR == nRet && WSA_IO_PENDING != WSAGetLastError())
 	{
 		RemoveStaleClient(pIoContext, FALSE);
 		return false;
 	}
+
 	return true;
 }
 
@@ -558,6 +594,31 @@ bool CCoreByIOCP::AssociateSocketWithCompletionPort(SOCKET socket, DWORD dwCompl
 	// 第二个参数为完成端口句柄时，返回值为完成端口。为空时，返回新的完成端口句柄
 	HANDLE hTmp = CreateIoCompletionPort((HANDLE)socket, m_hIOCompletionPort, dwCompletionKey, 0);
 	return hTmp == m_hIOCompletionPort;
+}
+
+void CCoreByIOCP::AddCLientInfo(SOCKET socket, string str)
+{
+	m_mapClient[socket] = str;
+}
+
+void CCoreByIOCP::RomoveClientInfo(SOCKET socket)
+{
+	m_mapClient.erase(socket);
+}
+
+void CCoreByIOCP::GetClientSOCKET(string str, SOCKET & socket)
+{
+	std::map<SOCKET, string>::iterator iter = m_mapClient.begin();
+	for (; iter!=m_mapClient.end(); iter++)
+	{
+		if (strcmp((iter->second).c_str(), str.c_str()))
+		{
+			socket =  iter->first;
+			return;
+		}
+	}
+
+	socket = INVALID_SOCKET;
 }
 
 PER_IO_CONTEXT* CCoreByIOCP::AllocateClientIOContext()
@@ -578,7 +639,6 @@ PER_IO_CONTEXT* CCoreByIOCP::AllocateClientIOContext()
 	m_listIoContext.push_back(pIoContext);
 	if (pIoContext != NULL)
 	{
-		// 此处待测试
 		pIoContext->Init();
 	}
 

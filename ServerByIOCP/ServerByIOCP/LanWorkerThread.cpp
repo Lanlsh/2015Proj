@@ -86,13 +86,14 @@ void LanWorkerThread::DoExec()
 	DWORD dwErr = 0;
 	IOCP_PARAM* pIocpParam = NULL;
 	PER_IO_CONTEXT* pIoContext = NULL;
+	HANDLE hdIOCP = m_coreIOCP->GetIOCPPort();
 
 	while (1)
 	{
 		//m_eventCondition.Wait();
 		//m_bRunState = false;
 		bRet = GetQueuedCompletionStatus(//  从完成端口中获取消息
-			m_coreIOCP->GetIOCPPort(),
+			hdIOCP,
 			&dwIoSize,
 			(PULONG_PTR)&pIocpParam,
 			&pOverlapped,
@@ -110,7 +111,7 @@ void LanWorkerThread::DoExec()
 			{
 				// 超时后，通过发送一个消息，判断是否断线，否则在socket上投递WSARecv会出错
 				// 因为如果客户端网络异常断开(例如客户端崩溃或者拔掉网线等)的时候，服务器端是无法收到客户端断开的通知的
-				if (-1 == send(pIocpParam->m_sock, "", 0, 0))
+				if (-1 == send(pIocpParam->m_rourceSock, "", 0, 0))
 				{
 					m_coreIOCP->MoveToFreeParamPool(pIocpParam);
 					m_coreIOCP->RemoveStaleClient(pIoContext, FALSE);

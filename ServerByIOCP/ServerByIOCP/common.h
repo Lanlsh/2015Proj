@@ -46,47 +46,69 @@ typedef enum EM_IOType
 //				单IO数据结构体定义(用于每一个重叠操作的参数)
 //====================================================================================
 
+//结构体里可以定义一个指针，设置大小，用来传参！！！！
 struct PER_IO_CONTEXT
 {
 	OVERLAPPED		m_overLapped;								//用于IOCP的核心数据结构!!!!!!
 	IOType			m_IOType;									//接收到的IO需要处理的类型
 	WSABUF			m_wsaBuf;                                   // WSA类型的缓冲区，用于给重叠操作传参数的
-	SOCKET			m_sock;										// 接收到的连接的套接字 
-	SOCKADDR_IN		m_addr;										// 套接字地址信息
+	SOCKET			m_rourceSock;								// 接收到的连接的套接字 
+	SOCKADDR_IN		m_resourceAddr;										// 发送源套接字地址信息
 	char			m_szBuf[MAX_BUFFER_LEN];					//这个是WSABUF里具体存字符的缓冲区
 	DWORD			m_dwBytesSend;								// 发送的字节数
 	DWORD			m_dwBytesRecv;								// 接收的字节数
+
+	string			m_desAddr;									// 发送到目标的套接字地址信息 //格式为“IP:Port”
 
 	void Init()
 	{
 		ZeroMemory(&m_overLapped, sizeof(OVERLAPPED));
 		ZeroMemory(m_szBuf, MAX_BUFFER_LEN);
-		ZeroMemory(&m_addr, sizeof(SOCKADDR_IN));
+		ZeroMemory(&m_resourceAddr, sizeof(SOCKADDR_IN));
+		ZeroMemory(&m_resourceAddr.sin_zero, 8);
 		m_IOType = EM_IOIdle;
-		m_sock = INVALID_SOCKET;
+		m_rourceSock = INVALID_SOCKET;
 		m_wsaBuf.buf = m_szBuf;
 		m_wsaBuf.len = MAX_BUFFER_LEN;
 		m_dwBytesSend = 0;
 		m_dwBytesRecv = 0;
+		m_desAddr.clear();
 	}
 
 	void Reset()
 	{
 		ZeroMemory(&m_overLapped, sizeof(OVERLAPPED));
 		ZeroMemory(m_szBuf, MAX_BUFFER_LEN);
-		ZeroMemory(&m_addr, sizeof(SOCKADDR_IN));
+		ZeroMemory(&m_resourceAddr, sizeof(SOCKADDR_IN));
+		ZeroMemory(&m_resourceAddr.sin_zero, 8);
 		m_IOType = EM_IOIdle;
-		m_sock = INVALID_SOCKET;
+		m_rourceSock = INVALID_SOCKET;
 		m_wsaBuf.buf = m_szBuf;
 		m_wsaBuf.len = MAX_BUFFER_LEN;
 		m_dwBytesSend = 0;
 		m_dwBytesRecv = 0;
+		m_desAddr.clear();
 	}
 };
 
 const int const_nMsgSize = sizeof(char) * sizeof(PER_IO_CONTEXT);
 
-struct IOCP_PARAM					 // 完成端口传递的参数
+// 完成端口传递的参数
+struct IOCP_PARAM					 
 {
-	SOCKET m_sock;
+	SOCKET m_rourceSock;
 };
+
+
+/*
+描述： 客户端发送消息头部解析结构体
+sin_addr: IP地址
+sin_port: 端口号
+*/
+const int nMessageBufMaxSize = MAX_BUFFER_LEN - 22;	//发送消息的文字信息最大的字节数
+typedef struct ST_SendToIpInfo
+{
+	char sin_addr[16];
+	char sin_port[6];
+	char buf[nMessageBufMaxSize];
+}SendToIpInfo;
