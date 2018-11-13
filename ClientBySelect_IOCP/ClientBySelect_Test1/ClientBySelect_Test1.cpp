@@ -34,6 +34,19 @@ struct TCPMessage
 
 const int nSize = sizeof(char) * sizeof(TCPMessage);
 
+/*
+	描述： 客户端发送消息头部解析结构体
+	sin_addr: IP地址
+	sin_port: 端口号
+*/
+const int nMessageBufMaxSize = nMessageWordMaxSize - 22;	//发送消息的文字信息最大的字节数
+typedef struct ST_SendToIpInfo
+{
+	char sin_addr[16];
+	char sin_port[6];
+	char buf[nMessageBufMaxSize];
+}SendToIpInfo;
+
 #define SERVER_PORT 8888
 #define SERVER_IP "192.168.15.112"
 bool bIsHaveConnect = false;
@@ -56,6 +69,43 @@ void ReceiveInput(VOID)
 	}
 }
 
+
+//按:分割字符串
+void SplitString(string str, SendToIpInfo& ipInfo)
+{
+	ZeroMemory(ipInfo.sin_addr, 16);
+	ZeroMemory(ipInfo.sin_port, 6);
+	ZeroMemory(ipInfo.buf, nMessageBufMaxSize);
+	char buf[16];
+	char strinfo[nMessageWordMaxSize];
+	ZeroMemory(strinfo, nMessageWordMaxSize);
+	memcpy(strinfo, str.c_str(), str.length());
+	char* p = strtok_s(strinfo, ":", (char**)(&buf));
+
+	int count = 0;
+	while (p)
+	{
+		switch (count)
+		{
+		case 0:
+			memcpy(ipInfo.sin_addr, p, 16);
+			break;
+		case 1:
+			memcpy(ipInfo.sin_port, p, 6);
+			break;
+		case 2:
+			memcpy(ipInfo.buf, p, nMessageBufMaxSize);
+			break;
+		}
+
+		count++;
+		p = strtok_s(NULL, ":", (char**)(&buf));
+	}
+
+}
+
+
+
 //发送消息给服务器
 void SendMsgToServer(fd_set& fdTemp, fd_set& fdRead, SOCKET& sclient)
 {
@@ -66,52 +116,65 @@ void SendMsgToServer(fd_set& fdTemp, fd_set& fdRead, SOCKET& sclient)
 	char* cSendMessage = (char*)malloc(nMessageWordMaxSize);
 	memset(cSendMessage, 0, nMessageWordMaxSize);
 
-	//因为发送的文字信息为定长，所以，str.length()不能超过1024字节！！！
-	if (str.length() >= nMessageWordMaxSize)
-	{
-		memcpy(cSendMessage, str.c_str(), nMessageWordMaxSize);
-	}
-	else
-		memcpy(cSendMessage, str.c_str(), str.length());
+	////因为发送的文字信息为定长，所以，str.length()不能超过1024字节！！！
+	//if (str.length() >= nMessageWordMaxSize)
+	//{
+	//	memcpy(cSendMessage, str.c_str(), nMessageWordMaxSize);
+	//}
+	//else
+	//	memcpy(cSendMessage, str.c_str(), str.length());
 
-	int sendSuccessSize = 0;
-	while (sendSuccessSize != nMessageWordMaxSize)
+	/*
+		客户端输入格式：IP:端口号:发送信息
+	*/
+
+	SendToIpInfo ipInfo;
+	SplitString(str, ipInfo);
+	memcpy(cSendMessage, &ipInfo, nMessageWordMaxSize);
+	ULONG ulFlags = MSG_PARTIAL;
+	DWORD dwNumBytesOfRecvd;
+	WSABUF	m_wsaBuf;
+	m_wsaBuf.buf = cSendMessage;
+	m_wsaBuf.len = nMessageWordMaxSize;
+
+	INT nRet = WSASend(
+		sclient,
+		&m_wsaBuf,
+		1,
+		&(m_wsaBuf.len),
+		ulFlags,
+		NULL,
+		NULL);
+
+	if (SOCKET_ERROR == nRet && WSA_IO_PENDING != WSAGetLastError())
 	{
-		int curSuccessSize = 0;
-		curSuccessSize = send(sclient, cSendMessage, nMessageWordMaxSize, 0);
-		if (curSuccessSize <= 0 || (curSuccessSize == SOCKET_ERROR))
+		cout << SERVER_IP << "closed" << endl;
+
+		//如果关闭相关的socket，则必须clear掉相关socket
+		FD_CLR(sclient, &fdTemp);
+		FD_CLR(sclient, &fdRead);
+
+		if (sclient != INVALID_SOCKET)
 		{
-			cout << SERVER_IP << "closed" << endl;
+			closesocket(sclient);
+			sclient = INVALID_SOCKET;
 
-			//如果关闭相关的socket，则必须clear掉相关socket
-			FD_CLR(sclient, &fdTemp);
-			FD_CLR(sclient, &fdRead);
-
-			if (sclient != INVALID_SOCKET)
+			sclient = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+			if (sclient == INVALID_SOCKET)
 			{
-				closesocket(sclient);
-				sclient = INVALID_SOCKET;
-
-				sclient = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-				if (sclient == INVALID_SOCKET)
-				{
-					cout << "创建socket失败！！！！" << endl;
-					return ;
-				}
-
-				FD_SET(sclient, &fdRead);
+				cout << "创建socket失败！！！！" << endl;
+				return;
 			}
 
-			bIsHaveConnect = false;
-			break;
+			FD_SET(sclient, &fdRead);
 		}
 
-		sendSuccessSize += curSuccessSize;
+		bIsHaveConnect = false;
 	}
-
-	if (sendSuccessSize == nSize)
+	else
 	{
 		m_qeSendMessage.pop();
+		cout<<ipInfo.sin_addr << ":" << ipInfo.sin_port << ":" << ipInfo.buf << "     发送数据成功！！！！！！！！" << endl;
 	}
 	
 	free(cSendMessage);
@@ -204,44 +267,48 @@ int main()
 			{
 				memset(recvData, 0, nSize);
 				//接收来自客户端的数据
-				int nRecvLength = 0;
-				while (nRecvLength != nMessageWordMaxSize)
+
+				ULONG ulFlags = MSG_PARTIAL;
+				DWORD dwNumBytesOfRecvd;
+				WSABUF	m_wsaBuf;
+				m_wsaBuf.buf = recvData;
+				m_wsaBuf.len = nMessageWordMaxSize;
+
+				UINT nRet = WSARecv(
+					sclient,
+					&(m_wsaBuf),
+					1,
+					&dwNumBytesOfRecvd,// 接收的字节数，异步操作的返回结果一般为0，具体接收到的字节数在完成端口获得
+					&(ulFlags),
+					NULL,
+					NULL);
+
+				if (SOCKET_ERROR == nRet && WSA_IO_PENDING != WSAGetLastError())
 				{
-					int curLength = 0;
-					curLength = recv(sclient, recvData, nMessageWordMaxSize, 0);
-					if (curLength <= 0 || (curLength == SOCKET_ERROR))
+					cout << "server " << SERVER_IP << "closed" << endl;
+					//如果关闭相关的socket，则必须clear掉相关socket
+					FD_CLR(sclient, &fdTemp);
+					FD_CLR(sclient, &fdRead);
+
+					//windows套接字不能被关闭多次!!!!!!
+					if (sclient != INVALID_SOCKET)
 					{
-						cout << "server " << SERVER_IP << "closed" << endl;
-						//如果关闭相关的socket，则必须clear掉相关socket
-						FD_CLR(sclient, &fdTemp);
-						FD_CLR(sclient, &fdRead);
+						closesocket(sclient);
+						sclient = INVALID_SOCKET;
 
-						//windows套接字不能被关闭多次!!!!!!
-						if (sclient != INVALID_SOCKET)
+						sclient = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+						if (sclient == INVALID_SOCKET)
 						{
-							closesocket(sclient);
-							sclient = INVALID_SOCKET;
-
-							sclient = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-							if (sclient == INVALID_SOCKET)
-							{
-								cout << "创建socket失败！！！！" << endl;
-								return 0;
-							}
-
-							FD_SET(sclient, &fdRead);
+							cout << "创建socket失败！！！！" << endl;
+							return 0;
 						}
 
-						bIsHaveConnect = false;
-
-						break;
+						FD_SET(sclient, &fdRead);
 					}
 
-					nRecvLength += curLength;
-
+					bIsHaveConnect = false;
 				}
-
-				if (nRecvLength == nMessageWordMaxSize)
+				else
 				{
 					cout << "server " << SERVER_IP << ": " << recvData << endl;
 				}
