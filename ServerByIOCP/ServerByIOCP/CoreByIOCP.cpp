@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "CoreByIOCP.h"
 #include "LanThreadPool.h"
+#pragma warning(disable: 4996)
 
 CCoreByIOCP::CCoreByIOCP()
 {
@@ -377,6 +378,10 @@ bool CCoreByIOCP::OnAccept(PER_IO_CONTEXT* pIoContext)
 	pNewIoContext->m_rourceSock = pIoContext->m_rourceSock;
 	pNewIoContext->m_resourceAddr = *RemoteSockAddr;
 
+	//保存数据
+	memcpy(pNewIoContext->m_szBufCache, pIoContext->m_szBuf, pIoContext->m_dwBytesRecv);
+	pNewIoContext->m_dwBytesRecv = pIoContext->m_dwBytesRecv;	//记录接收到的字节数
+
 	// 处理消息，此处为连接上，第一次接受到客户端的数据
 	m_pNotifyProc(NULL, pIoContext, NC_CLIENT_CONNECT);
 
@@ -398,11 +403,9 @@ bool CCoreByIOCP::OnAccept(PER_IO_CONTEXT* pIoContext)
 	SendToIpInfo ipInfo;
 	ZeroMemory(&ipInfo, MAX_BUFFER_LEN);
 	memcpy(&ipInfo, pIoContext->m_szBuf, MAX_BUFFER_LEN);
-	string strIP = ipInfo.sin_IP;
-	string strPort = ipInfo.sin_port;
-	string str = strIP + ":" + strPort;
+
 	//增加客户端信息
-	AddCLientInfo(pNewIoContext->m_rourceSock, str);
+	AddCLientInfo(pNewIoContext->m_rourceSock, ipInfo.nSelfID);
 
 	// Set KeepAlive 设置心跳包，开启保活机制，用于保证TCP的长连接（它会在底层发一些数据，不会传到应用层）
 	unsigned long chOpt = 1;
@@ -466,11 +469,35 @@ bool CCoreByIOCP::OnClientReading(PER_IO_CONTEXT* pIOContext, DWORD dwSize /*= 0
 	bool bRet = false;
 	try
 	{
+		//保存数据
+		if (pIOContext->m_dwBytesRecv != MAX_BUFFER_LEN)
+		{
+			char* p = pIOContext->m_szBufCache + pIOContext->m_dwBytesRecv;
+			memcpy(p, pIOContext->m_szBuf, dwSize);	//刷新接收到的一个完整包中的缓存
+		}
+
+		pIOContext->m_dwBytesRecv += dwSize;	//记录接收到的字节数
+
 		// 处理接收到的数据
 		m_pNotifyProc(NULL, pIOContext, NC_RECEIVE);
 
-		// 再投递一个异步接收消息
-		bRet = PostRecv(pIOContext);
+		if (pIOContext->m_dwBytesRecv == MAX_BUFFER_LEN)
+		{
+			// 处理接收到的数据
+			cout << "完整接收数据！！！！！！！！！" << endl;
+			m_pNotifyProc(NULL, pIOContext, NC_RECEIVE_COMPLETE);
+
+			// 再投递一个异步接收消息
+			bRet = PostRecv(pIOContext, true);
+		}
+		else
+		{
+			// 再投递一个异步接收消息
+			//因为此时一个包没有接收完，所以，其一些信息不能被初始化
+			bRet = PostRecv(pIOContext, false);
+		}
+
+
 	}
 	catch (...) {}
 
@@ -481,8 +508,8 @@ bool CCoreByIOCP::PostAcceptEx(PER_IO_CONTEXT * pAcceptIoContext)
 {
 	pAcceptIoContext->m_IOType = EM_IOAccept;// 初始化 IO类型 为接收套接字
 
-										  // 为以后新连入的客户端准备好Socket（这是与传统Accept最大的区别）
-										  // 实际上市创建一个 网络连接池 ，类似于 内存池，我们先创建一定数量的socket，然后直接使用就是了
+	// 为以后新连入的客户端准备好Socket（这是与传统Accept最大的区别）
+	// 实际上市创建一个 网络连接池 ，类似于 内存池，我们先创建一定数量的socket，然后直接使用就是了
 	pAcceptIoContext->m_rourceSock = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_IP, NULL, 0, WSA_FLAG_OVERLAPPED);
 	if (INVALID_SOCKET == pAcceptIoContext->m_rourceSock)
 		return false;
@@ -506,11 +533,17 @@ bool CCoreByIOCP::PostAcceptEx(PER_IO_CONTEXT * pAcceptIoContext)
 	return true;
 }
 
-bool CCoreByIOCP::PostRecv(PER_IO_CONTEXT* pIoContext)
+bool CCoreByIOCP::PostRecv(PER_IO_CONTEXT* pIoContext, bool bIsNeedInit)
 {
-	// 清空缓冲区，再次投递
-	ZeroMemory(pIoContext->m_szBuf, MAX_BUFFER_LEN);
-	ZeroMemory(&pIoContext->m_overLapped, sizeof(OVERLAPPED));
+	if (bIsNeedInit)
+	{
+		// 清空缓冲区，再次投递
+		ZeroMemory(&pIoContext->m_overLapped, sizeof(OVERLAPPED));
+		ZeroMemory(pIoContext->m_szBuf, MAX_BUFFER_LEN);
+		ZeroMemory(pIoContext->m_szBufCache, MAX_BUFFER_LEN);
+		pIoContext->m_dwBytesRecv = 0;
+	}
+
 	pIoContext->m_IOType = EM_IORecv;
 	DWORD dwNumBytesOfRecvd;
 
@@ -528,6 +561,7 @@ bool CCoreByIOCP::PostRecv(PER_IO_CONTEXT* pIoContext)
 		RemoveStaleClient(pIoContext, FALSE);
 		return false;
 	}
+
 	return true;
 }
 
@@ -539,13 +573,15 @@ bool CCoreByIOCP::OnClientWriting(PER_IO_CONTEXT* pIOContext, DWORD dwSize /*= 0
 	{
 		// 异步发送的返回的传输成功的结果是否 少于 要求发送的数据大小（未发送完成），此时重发
 		// 最好使用CRC校验之内的，更加严谨性（可以在结构体中放一个计算的CRC值），但是计算会更消耗性能
-		if (dwSize != pIOContext->m_dwBytesSend)
+		pIOContext->m_dwBytesSend += dwSize;
+		if (MAX_BUFFER_LEN > pIOContext->m_dwBytesSend)
 		{
 			bRet = PostSend(pIOContext);
 		}
 		else// 已经发送成功，将结构体放回内存池
 		{
 			m_pNotifyProc(NULL, pIOContext, NC_TRANSMIT);
+			pIOContext->m_dwBytesSend = 0;
 			MoveToFreePool(pIOContext);
 		}
 	}
@@ -556,22 +592,44 @@ bool CCoreByIOCP::OnClientWriting(PER_IO_CONTEXT* pIOContext, DWORD dwSize /*= 0
 
 
 
-bool CCoreByIOCP::PostSend(PER_IO_CONTEXT* pIoContext)
+bool CCoreByIOCP::PostSend(PER_IO_CONTEXT* pIoContext, bool bIsSendToSource)
 {
-	pIoContext->m_wsaBuf.buf = pIoContext->m_szBuf;
-	pIoContext->m_wsaBuf.len = static_cast<ULONG>(strlen(pIoContext->m_szBuf));
+	/*测试代码---start*/
+	//在消息头部增加发送者ID
+	char buf[MAX_BUFFER_LEN] = { 0 };
+	char cResourceID[12] = { 0 };
+	UINT32 ID = 0;
+	GetClientID(ID, pIoContext->m_rourceSock);
+	itoa(ID, cResourceID, 10);
+	memcpy(buf, cResourceID, 4);
+	char* p = buf + 4;
+	memcpy(p, pIoContext->m_szBuf, MAX_BUFFER_LEN-4);
+
+	memcpy(pIoContext->m_szBuf, buf, MAX_BUFFER_LEN);
+	/*测试代码---end*/
+
+	pIoContext->m_wsaBuf.buf = pIoContext->m_szBuf;		//坑！！以‘/0’结束！！！
+	pIoContext->m_wsaBuf.len = MAX_BUFFER_LEN;//static_cast<ULONG>(strlen(pIoContext->m_szBuf));
 	pIoContext->m_IOType = EM_IOSend;
 	ULONG ulFlags = MSG_PARTIAL;
 
-	SOCKET	socket;
-	GetClientSOCKET(pIoContext->m_desAddr, socket);
-	if (socket == INVALID_SOCKET)
+	//给目标地址发消息
+	SOCKET	socket = INVALID_SOCKET;
+	if (bIsSendToSource)
 	{
-		return false;
+		socket = pIoContext->m_rourceSock;
+	}
+	else
+	{
+		GetClientSOCKET(pIoContext->m_desID, socket);
+		if (socket == INVALID_SOCKET)
+		{
+			return false;
+		}
 	}
 
 	INT nRet = WSASend(
-		pIoContext->m_rourceSock,
+		socket,
 		&pIoContext->m_wsaBuf,
 		1,
 		&(pIoContext->m_wsaBuf.len),
@@ -596,9 +654,10 @@ bool CCoreByIOCP::AssociateSocketWithCompletionPort(SOCKET socket, DWORD dwCompl
 	return hTmp == m_hIOCompletionPort;
 }
 
-void CCoreByIOCP::AddCLientInfo(SOCKET socket, string str)
+void CCoreByIOCP::AddCLientInfo(SOCKET socket, UINT32 id)
 {
-	m_mapClient[socket] = str;
+	cout << "增加客户端信息： " << socket << ":" << id << endl;
+	m_mapClient[socket] = id;
 }
 
 void CCoreByIOCP::RomoveClientInfo(SOCKET socket)
@@ -606,12 +665,12 @@ void CCoreByIOCP::RomoveClientInfo(SOCKET socket)
 	m_mapClient.erase(socket);
 }
 
-void CCoreByIOCP::GetClientSOCKET(string str, SOCKET & socket)
+void CCoreByIOCP::GetClientSOCKET(UINT32 id, SOCKET & socket)
 {
-	std::map<SOCKET, string>::iterator iter = m_mapClient.begin();
+	std::map<SOCKET, UINT32>::iterator iter = m_mapClient.begin();
 	for (; iter!=m_mapClient.end(); iter++)
 	{
-		if (strcmp((iter->second).c_str(), str.c_str()))
+		if (iter->second == id)
 		{
 			socket =  iter->first;
 			return;
@@ -619,6 +678,21 @@ void CCoreByIOCP::GetClientSOCKET(string str, SOCKET & socket)
 	}
 
 	socket = INVALID_SOCKET;
+}
+
+void CCoreByIOCP::GetClientID(UINT32 & id, SOCKET socket)
+{
+	std::map<SOCKET, UINT32>::iterator iter = m_mapClient.begin();
+	for (; iter != m_mapClient.end(); iter++)
+	{
+		if (iter->first == socket)
+		{
+			id = iter->second;
+			return;
+		}
+	}
+
+	id = 0;
 }
 
 PER_IO_CONTEXT* CCoreByIOCP::AllocateClientIOContext()

@@ -12,7 +12,7 @@
 #define PORT 8888
 #define SRV_IP "192.168.15.112"
 
-#define MAX_BUFFER_LEN					4096		// 江湖规矩一般为8k
+#define MAX_BUFFER_LEN					100		// 江湖规矩一般为8k
 #define WORKER_THREADS_PER_PROCESSOR	2
 #define MAX_POST_ACCEPT					10			// 同时投递AcceptEx的请求数量
 #define EXIT_CODE						NULL			
@@ -53,17 +53,19 @@ struct PER_IO_CONTEXT
 	IOType			m_IOType;									//接收到的IO需要处理的类型
 	WSABUF			m_wsaBuf;                                   // WSA类型的缓冲区，用于给重叠操作传参数的
 	SOCKET			m_rourceSock;								// 接收到的连接的套接字 
-	SOCKADDR_IN		m_resourceAddr;										// 发送源套接字地址信息
-	char			m_szBuf[MAX_BUFFER_LEN];					//这个是WSABUF里具体存字符的缓冲区
+	SOCKADDR_IN		m_resourceAddr;								// 发送源套接字地址信息
+	char			m_szBuf[MAX_BUFFER_LEN];					//这个是WSABUF里具体存字符的缓冲区，GetQueuedCompletionStatus函数调用一次的缓存
+	char			m_szBufCache[MAX_BUFFER_LEN];				//用于缓存接收一个完整包
 	DWORD			m_dwBytesSend;								// 发送的字节数
 	DWORD			m_dwBytesRecv;								// 接收的字节数
 
-	string			m_desAddr;									// 发送到目标的套接字地址信息 //格式为“IP:Port”
+	UINT32			m_desID;									// 接收者的ID号（全网唯一的）
 
 	void Init()
 	{
 		ZeroMemory(&m_overLapped, sizeof(OVERLAPPED));
 		ZeroMemory(m_szBuf, MAX_BUFFER_LEN);
+		ZeroMemory(m_szBufCache, MAX_BUFFER_LEN);
 		ZeroMemory(&m_resourceAddr, sizeof(SOCKADDR_IN));
 		ZeroMemory(&m_resourceAddr.sin_zero, 8);
 		m_IOType = EM_IOIdle;
@@ -72,13 +74,14 @@ struct PER_IO_CONTEXT
 		m_wsaBuf.len = MAX_BUFFER_LEN;
 		m_dwBytesSend = 0;
 		m_dwBytesRecv = 0;
-		m_desAddr.clear();
+		m_desID = 0;
 	}
 
 	void Reset()
 	{
 		ZeroMemory(&m_overLapped, sizeof(OVERLAPPED));
 		ZeroMemory(m_szBuf, MAX_BUFFER_LEN);
+		ZeroMemory(m_szBufCache, MAX_BUFFER_LEN);
 		ZeroMemory(&m_resourceAddr, sizeof(SOCKADDR_IN));
 		ZeroMemory(&m_resourceAddr.sin_zero, 8);
 		m_IOType = EM_IOIdle;
@@ -87,7 +90,7 @@ struct PER_IO_CONTEXT
 		m_wsaBuf.len = MAX_BUFFER_LEN;
 		m_dwBytesSend = 0;
 		m_dwBytesRecv = 0;
-		m_desAddr.clear();
+		m_desID = 0;
 	}
 };
 
@@ -101,14 +104,15 @@ struct IOCP_PARAM
 
 
 /*
-描述： 客户端发送消息头部解析结构体
-sin_addr: IP地址
-sin_port: 端口号
+	描述： 客户端发送消息头部解析结构体
+	nSelfID:	自己的ID号
+	nSendToID:	接收者的ID号
+	buf:		发送的信息
 */
-const int nMessageBufMaxSize = MAX_BUFFER_LEN - 22;	//发送消息的文字信息最大的字节数
+const int nMessageBufMaxSize = MAX_BUFFER_LEN - 2 * sizeof(UINT32);	//发送消息的文字信息最大的字节数
 typedef struct ST_SendToIpInfo
 {
-	char sin_addr[16];
-	char sin_port[6];
+	UINT32 nSelfID;		//4字节
+	UINT32 nSendToID;	//4字节
 	char buf[nMessageBufMaxSize];
 }SendToIpInfo;

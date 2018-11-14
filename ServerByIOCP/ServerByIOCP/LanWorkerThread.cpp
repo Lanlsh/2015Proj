@@ -102,7 +102,7 @@ void LanWorkerThread::DoExec()
 		if (EXIT_CODE == pIocpParam)
 			break;
 
-		pIoContext = CONTAINING_RECORD(pOverlapped, PER_IO_CONTEXT, m_overLapped);
+		pIoContext = CONTAINING_RECORD(pOverlapped, PER_IO_CONTEXT, m_overLapped);	//每一个socket都有自己独自的PER_IO_CONTEXT！！！！后续发送接收都会继续使用之前同一个PER_IO_CONTEXT
 
 		if (!bRet)// 处理错误信息
 		{

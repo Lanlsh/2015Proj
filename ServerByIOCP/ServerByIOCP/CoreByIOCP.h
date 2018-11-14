@@ -34,7 +34,7 @@ public:
 	VOID RemoveStaleClient(PER_IO_CONTEXT* pIoContext, BOOL bGraceful);// 溢出客户端套接字
 	VOID ReleaseResource();									// 释放资源
 
-	bool PostSend(PER_IO_CONTEXT* pIoContext);				// 投递一个发送操作
+	bool PostSend(PER_IO_CONTEXT* pIoContext, bool bIsSendToSource = true);				// 投递一个发送操作
 	PER_IO_CONTEXT* AllocateClientIOContext();				// 从内存池中分配一个socket结构体
 
 	// 消息映射
@@ -55,20 +55,23 @@ protected:
 
 	// 投递操作
 	bool PostAcceptEx(PER_IO_CONTEXT* pAcceptIoContext);	// 投递一个Accept请求
-	bool PostRecv(PER_IO_CONTEXT* pIoContext);				// 投递一个接收的IO操作
+	bool PostRecv(PER_IO_CONTEXT* pIoContext, bool bIsNeedInit = false);		// 投递一个接收的IO操作			//如果已接收完一个完整包或重新开始使用，则bIsNeedInit应设置为true
 
 	bool OnAccept(PER_IO_CONTEXT* pIoContext);
 	// 将 监听套接字 绑定到完成端口中
 	bool AssociateSocketWithCompletionPort(SOCKET socket, DWORD dwCompletionKey);
 
 	//增加客户端信息
-	void AddCLientInfo(SOCKET socket, string str);
+	void AddCLientInfo(SOCKET socket, UINT32 id);
 
 	//删除客户端信息
 	void RomoveClientInfo(SOCKET socket);
 
-	//根据IP和端口号获取客户端SOCKET
-	void GetClientSOCKET(string str, SOCKET& socket);
+	//根据ID获取客户端SOCKET
+	void GetClientSOCKET(UINT32 id, SOCKET& socket);
+
+	//根据客户端SOCKET获取ID
+	void GetClientID(UINT32& id, SOCKET socket);
 
 private:
 	NOTIFYPROC m_pNotifyProc;					// 消息回调函数
@@ -98,7 +101,7 @@ private:
 	LPFN_GETACCEPTEXSOCKADDRS   m_lpfnGetAcceptExSockAddrs;
 
 	//客户端socket和客户端IP地址以及端口号
-	std::map<SOCKET, string>	m_mapClient;
+	std::map<SOCKET, UINT32>	m_mapClient;
 
 	//用来判断是否执行了StopCore	//用于当coreIOCP已经跑起来时，突然关闭此进程导致资源没有安全释放
 	bool	m_bIsExecStopCore;
