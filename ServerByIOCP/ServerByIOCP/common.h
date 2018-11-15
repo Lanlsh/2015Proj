@@ -29,7 +29,7 @@
 #define	NC_CLIENT_DISCONNECT	0x0002	//客户端断开
 #define	NC_TRANSMIT				0x0003	//发送数据
 #define	NC_RECEIVE				0x0004	//接收数据
-#define NC_RECEIVE_COMPLETE		0x0005	// 完整接收
+#define NC_RECEIVE_COMPLETE		0x0005	//完整接收
 
 ////////////////////////////////////////////////////////////////////
 //在完成端口上投递的I/O操作的类型

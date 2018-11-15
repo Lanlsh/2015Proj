@@ -320,7 +320,6 @@ VOID CCoreByIOCP::ReleaseResource()
 	// 关闭监听套接字
 	RELEASE_SOCKET(m_socListen);
 
-
 	// 删除监听套接字的完成端口参数
 	delete m_pListenIocpParam;
 
@@ -667,6 +666,7 @@ void CCoreByIOCP::RomoveClientInfo(SOCKET socket)
 
 void CCoreByIOCP::GetClientSOCKET(UINT32 id, SOCKET & socket)
 {
+	//可以使用map自带的find函数，map底层的实现是“红黑树”，所以，用其自带的函数效率会更高！！
 	std::map<SOCKET, UINT32>::iterator iter = m_mapClient.begin();
 	for (; iter!=m_mapClient.end(); iter++)
 	{
@@ -682,6 +682,7 @@ void CCoreByIOCP::GetClientSOCKET(UINT32 id, SOCKET & socket)
 
 void CCoreByIOCP::GetClientID(UINT32 & id, SOCKET socket)
 {
+	//可以使用map自带的find函数，map底层的实现是“红黑树”，所以，用其自带的函数效率会更高！！
 	std::map<SOCKET, UINT32>::iterator iter = m_mapClient.begin();
 	for (; iter != m_mapClient.end(); iter++)
 	{
