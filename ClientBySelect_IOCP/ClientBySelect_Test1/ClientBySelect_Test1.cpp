@@ -16,8 +16,9 @@
 #pragma comment(lib, "ws2_32.lib")
 
 using namespace std;
+#pragma warning(disable: 4996)
 
-const int nMessageWordMaxSize = 4096;	//发送消息的文字信息最大的字节数
+const int nMessageWordMaxSize = 1024;	//发送消息的文字信息最大的字节数
 
 //TCP消息封装结构
 struct TCPMessage
@@ -36,45 +37,29 @@ const int nSize = sizeof(char) * sizeof(TCPMessage);
 
 /*
 	描述： 客户端发送消息头部解析结构体
-	sin_addr: IP地址
-	sin_port: 端口号
+	nSelfID:	自己的ID号 
+	nSendToID:	接收者的ID号
+	buf:		发送的信息
 */
-const int nMessageBufMaxSize = nMessageWordMaxSize - 22;	//发送消息的文字信息最大的字节数
+const int nMessageBufMaxSize = nMessageWordMaxSize - 2*sizeof(UINT32);	//发送消息的文字信息最大的字节数
 typedef struct ST_SendToIpInfo
 {
-	char sin_addr[16];
-	char sin_port[6];
+	UINT32 nSelfID;		//4字节
+	UINT32 nSendToID;	//4字节
 	char buf[nMessageBufMaxSize];
 }SendToIpInfo;
 
 #define SERVER_PORT 8888
 #define SERVER_IP "192.168.15.112"
 bool bIsHaveConnect = false;
-
-//发送消息给服务器的消息队列
-std::queue<string> m_qeSendMessage;
-void ReceiveInput(VOID)
-{
-	char input[nMessageWordMaxSize] = { 0 };
-	while (true)
-	{	
-		cin.getline(input, nMessageWordMaxSize);	//字符串的“空格”也会获取！！
-		if (input[0] != '\0')
-		{
-			m_qeSendMessage.push(input);
-			memset(input, 0, nMessageWordMaxSize);
-		}
-
-		//Sleep(1000);
-	}
-}
+UINT32	selfID = 0;
 
 
 //按:分割字符串
 void SplitString(string str, SendToIpInfo& ipInfo)
 {
-	ZeroMemory(ipInfo.sin_addr, 16);
-	ZeroMemory(ipInfo.sin_port, 6);
+	ipInfo.nSelfID = 0;
+	ipInfo.nSendToID = 0;
 	ZeroMemory(ipInfo.buf, nMessageBufMaxSize);
 	char buf[16];
 	char strinfo[nMessageWordMaxSize];
@@ -88,10 +73,10 @@ void SplitString(string str, SendToIpInfo& ipInfo)
 		switch (count)
 		{
 		case 0:
-			memcpy(ipInfo.sin_addr, p, 16);
+			ipInfo.nSelfID = atoi(p);
 			break;
 		case 1:
-			memcpy(ipInfo.sin_port, p, 6);
+			ipInfo.nSendToID = atoi(p);
 			break;
 		case 2:
 			memcpy(ipInfo.buf, p, nMessageBufMaxSize);
@@ -100,11 +85,40 @@ void SplitString(string str, SendToIpInfo& ipInfo)
 
 		count++;
 		p = strtok_s(NULL, ":", (char**)(&buf));
+
 	}
 
 }
 
 
+//发送消息给服务器的消息队列
+std::queue<string> m_qeSendMessage;
+void ReceiveInput(VOID)
+{
+	char input[nMessageWordMaxSize] = { 0 };
+	while (true)
+	{
+		cin.getline(input, nMessageWordMaxSize);	//字符串的“空格”也会获取！！
+		if (input[0] != '\0')
+		{
+			SendToIpInfo ipInfo;
+			SplitString(input, ipInfo);
+			if (ipInfo.nSelfID == 0 || ipInfo.nSendToID == 0)
+			{
+				cout << "您输入的ID格式不正确，请重新输入！ " << endl;
+				cout << "发送信息格式： 自己ID:接收者ID:发送的内容 " << endl;
+				continue;
+			}
+			m_qeSendMessage.push(input);
+			memset(input, 0, nMessageWordMaxSize);
+		}
+
+		//Sleep(1000);
+	}
+}
+
+
+bool bIsPrintSendMsgSuccess = false;
 
 //发送消息给服务器
 void SendMsgToServer(fd_set& fdTemp, fd_set& fdRead, SOCKET& sclient)
@@ -132,7 +146,6 @@ void SendMsgToServer(fd_set& fdTemp, fd_set& fdRead, SOCKET& sclient)
 	SplitString(str, ipInfo);
 	memcpy(cSendMessage, &ipInfo, nMessageWordMaxSize);
 	ULONG ulFlags = MSG_PARTIAL;
-	DWORD dwNumBytesOfRecvd;
 	WSABUF	m_wsaBuf;
 	m_wsaBuf.buf = cSendMessage;
 	m_wsaBuf.len = nMessageWordMaxSize;
@@ -174,7 +187,15 @@ void SendMsgToServer(fd_set& fdTemp, fd_set& fdRead, SOCKET& sclient)
 	else
 	{
 		m_qeSendMessage.pop();
-		cout<<ipInfo.sin_addr << ":" << ipInfo.sin_port << ":" << ipInfo.buf << "     发送数据成功！！！！！！！！" << endl;
+
+		//如果是连接到服务器成功，则不打印
+		if (bIsPrintSendMsgSuccess)
+		{
+			cout << "发送数据成功！！！！！！！！" << endl;
+		}
+		else
+			bIsPrintSendMsgSuccess = true;
+		
 	}
 	
 	free(cSendMessage);
@@ -201,7 +222,7 @@ int main()
 	sockaddr_in serAddr;
 	serAddr.sin_family = AF_INET;
 	serAddr.sin_port = htons(SERVER_PORT);
-	//serAddr.sin_addr.S_un.S_addr = inet_addr(m_cIp);
+	//serAddr.nSelfID.S_un.S_addr = inet_addr(m_cIp);
 	struct in_addr addr;
 	inet_pton(AF_INET, SERVER_IP, (void *)&addr);
 	serAddr.sin_addr.s_addr = addr.s_addr;
@@ -217,6 +238,29 @@ int main()
 	int nSize = sizeof(char) * (sizeof(TCPMessage));
 	char* recvData = (char*)malloc(nSize);
 
+	cout << "请设置您的ID（ID为大于0的4位整数）： ";
+
+	char input[100] = { 0 };
+	while (true)
+	{
+		cin.getline(input, nMessageWordMaxSize);	//字符串的“空格”也会获取！！
+		if (input[0] != '\0')
+		{
+			if (atoi(input) > 0 && (atoi(input)>1000))
+			{
+				selfID = atoi(input);
+				break;
+			}
+			else
+			{
+				cout<< "您输入的ID格式不正确，请重新输入！"<<endl;
+				cout << "请设置您的ID（ID为大于0的整数）： ";
+			}
+		}
+
+		//Sleep(1000);
+	}
+
 	//创建一个线程，接收玩家输入信息
 	std::thread thrdInput(&ReceiveInput);
 	thrdInput.detach();
@@ -227,14 +271,19 @@ int main()
 		{
 			if (connect(sclient, (sockaddr *)(&serAddr), sizeof(sockaddr_in)) == SOCKET_ERROR)
 			{
-				cout << "connect失败！！！！" << GetLastError() << endl;
+				cout << "连接服务器中。。。。。。" << endl;//<< GetLastError() << endl;
 				bIsHaveConnect = false;
 				Sleep(1000);
 				continue;
 			}
 			else
 			{
-				cout << "连接" << SERVER_IP << ":" << SERVER_PORT << " " << "connect成功！！！！" << endl;
+				cout << "连接" << SERVER_IP << ":" << SERVER_PORT << " " << "服务器connect成功！！！！" << endl;
+				char cResourceID[4] = { 0 };
+				itoa(selfID, cResourceID, 10);
+				m_qeSendMessage.push(cResourceID);
+				cout << "发送信息格式： 自己ID:接收者ID:发送的内容" << endl;
+				bIsPrintSendMsgSuccess = false;
 				bIsHaveConnect = true;
 				continue;
 			}
@@ -308,10 +357,28 @@ int main()
 
 					bIsHaveConnect = false;
 				}
+				else if (dwNumBytesOfRecvd > 0)
+				{
+					//前4字节为发送者ID
+					char cResourceID[4] = { 0 };
+					memcpy(cResourceID, recvData, 4);
+					UINT32 nResourceID = atoi(cResourceID);
+					char* p = recvData + 4;
+					if (nResourceID == selfID)
+					{
+						cout << "server " << ": " << p << endl;
+					}
+					else
+					{
+						cout << nResourceID << ": " << p << endl;
+					}
+					
+				}
 				else
 				{
-					cout << "server " << SERVER_IP << ": " << recvData << endl;
+					continue;
 				}
+
 			}
 
 		}
