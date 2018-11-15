@@ -1,4 +1,3 @@
-﻿  CoreByIOCP.cpp
-e:\lanliangsheng\2015proj\serverbyiocp\serverbyiocp\corebyiocp.cpp(78): warning C4018: “<”: 有符号/无符号不匹配
+﻿  ServerByIOCP.cpp
   ServerByIOCP.vcxproj -> E:\lanliangsheng\2015Proj\ServerByIOCP\x64\Debug\ServerByIOCP.exe
   ServerByIOCP.vcxproj -> E:\lanliangsheng\2015Proj\ServerByIOCP\x64\Debug\ServerByIOCP.pdb (Full PDB)

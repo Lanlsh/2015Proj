@@ -109,6 +109,7 @@ void CALLBACK NotifyProc(LPVOID lparam, PER_IO_CONTEXT* pIoContext, UINT uFlag)
 		if (pIOCP->PostSend(pSendIoContext, false))
 		{
 			char szSend[] = "目标地址已成功接收！！！";
+			ZeroMemory(pSendIoContext->m_szBuf, MAX_BUFFER_LEN);
 			memcpy(pSendIoContext->m_szBuf, szSend, strlen(szSend));
 			pSendIoContext->m_dwBytesSend = static_cast<WORD>(strlen(szSend));
 			pIOCP->PostSend(pSendIoContext, true);
@@ -116,7 +117,8 @@ void CALLBACK NotifyProc(LPVOID lparam, PER_IO_CONTEXT* pIoContext, UINT uFlag)
 		else
 		{
 			//发送给目标地址不成功，服务器回复客户端目标地址IP或Port不正确
-			char szSend[] = "发送的目标地址IP或Port不正确！！！";
+			char szSend[] = "接收者ID不存在或已下线！！！";
+			ZeroMemory(pSendIoContext->m_szBuf, MAX_BUFFER_LEN);
 			memcpy(pSendIoContext->m_szBuf, szSend, strlen(szSend));
 			pSendIoContext->m_dwBytesSend = static_cast<WORD>(strlen(szSend));
 			pIOCP->PostSend(pSendIoContext, true);

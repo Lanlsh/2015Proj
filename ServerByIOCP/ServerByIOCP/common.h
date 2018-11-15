@@ -12,7 +12,7 @@
 #define PORT 8888
 #define SRV_IP "192.168.15.112"
 
-#define MAX_BUFFER_LEN					100		// 江湖规矩一般为8k
+#define MAX_BUFFER_LEN					1024		// 江湖规矩一般为8k
 #define WORKER_THREADS_PER_PROCESSOR	2
 #define MAX_POST_ACCEPT					10			// 同时投递AcceptEx的请求数量
 #define EXIT_CODE						NULL			
